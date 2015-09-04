@@ -26,6 +26,7 @@ class ForkingPDNSBackendServer(SocketServer.ForkingMixIn,
     """
 
     def __init__(self, socket):
+        self.__resolver = None
         SocketServer.UnixStreamServer.__init__(self, socket, PDNSHandler)
 
     def set_query_resolver(self, resolver):
@@ -40,6 +41,8 @@ class ForkingPDNSBackendServer(SocketServer.ForkingMixIn,
         return self.__banner if self.__banner else "DEFAULT_BACKEND"
 
     def lookup_query(self, query):
+        if not self.__resolver:
+            raise Exception("This server has no resolver set.")
         return self.__resolver.lookup_query(query)
 
 
