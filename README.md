@@ -6,23 +6,21 @@ This is a simple pluggable library that allows the user to create a socket-based
 All the user needs to do is extend the AbstractPDNSResolver class, implement its lookup_query method, and set that on the Server object.
 
 Example:
-```
- 1 #!/usr/bin/python
- 2
- 3 import pypdns.backend
- 4 import pypdns.core
- 5
- 6
- 7 class ExampleResolver(pypdns.backend.AbstractPDNSResolver):
- 8
- 9     def lookup_query(self, query):
-10         return [pypdns.core.PDNSRecord("example.com", "IN", "A", 300, -1,
-11                                        "93.184.216.34")]
-12
-13
-14 s = pypdns.backend.ForkingPDNSBackendServer("/tmp/mysocket.socket")
-15
-16 s.set_query_resolver(ExampleResolver())
-17
-18 s.serve_forever()
+```python
+#!/usr/bin/python
+
+import pypdns.backend
+import pypdns.core
+
+
+class ExampleResolver(pypdns.backend.AbstractPDNSResolver):
+
+    def lookup_query(self, query):
+        return [pypdns.core.PDNSRecord("example.com", "IN", "A", 300, -1,
+                                       "93.184.216.34")]
+
+ 
+s = pypdns.backend.ForkingPDNSBackendServer("/tmp/mysocket.socket")
+s.set_query_resolver(ExampleResolver())
+s.serve_forever()
 ```
