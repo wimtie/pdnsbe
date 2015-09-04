@@ -21,8 +21,9 @@ class AbstractPDNSResolver(object):
 
     def lookup_query(self, query):
         """
-            This method will be called by the server. It should return a list
-            of PDNSRecord objects.
+            This method will be called by the server. The query argument will
+            be a PDNSQuery object, the method should return a list of
+            PDNSRecord objects.
          """
         raise NotImplemented("Not implemented, extend this class please.")
 
