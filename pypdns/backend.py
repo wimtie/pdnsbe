@@ -7,7 +7,7 @@ Socket based back-end server for PowerDNS with pluggable query resolution.
 
 import re
 import SocketServer
-import pdns.core as core
+import pypdns.core as core
 import logging
 import logging.handlers
 
@@ -27,6 +27,7 @@ class ForkingPDNSBackendServer(SocketServer.ForkingMixIn,
 
     def __init__(self, socket):
         self.__resolver = None
+        self.__banner = None
         SocketServer.UnixStreamServer.__init__(self, socket, PDNSHandler)
 
     def set_query_resolver(self, resolver):
