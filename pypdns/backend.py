@@ -19,13 +19,15 @@ DATA_RESPONSE_PREFIX = "DATA"
 
 class AbstractPDNSResolver(object):
 
+    """ Implement this class with your own resolver logic """
+
     def lookup_query(self, query):
         """
             This method will be called by the server. The query argument will
             be a PDNSQuery object, the method should return a list of
             PDNSRecord objects.
          """
-        raise NotImplemented("Not implemented, extend this class please.")
+        raise NotImplementedError("Not implemented, extend this class please.")
 
 
 class ForkingPDNSBackendServer(SocketServer.ForkingMixIn,
@@ -104,10 +106,10 @@ class PDNSHandler(SocketServer.BaseRequestHandler):
         self.__f.write(line if line.endswith("\n") else "%s\n" % line)
         self.__f.flush()
 
-    def __error_out(self, e):
+    def __error_out(self, exception):
         """ report the error to PowerDNS """
         # maybe report errors? self.__write_line_sync("LOG\t%r" % e)
-        self.__logger.exception(e)
+        self.__logger.exception(exception)
         self.__write_line_sync("FAIL")
         self.__write_line_sync("END")
         self.__f.close()
