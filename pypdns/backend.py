@@ -1,0 +1,131 @@
+#!/usr/bin/python
+
+"""
+Socket based back-end server for PowerDNS with pluggable query resolution.
+"""
+
+
+import re
+import SocketServer
+import pdns.core as core
+import logging
+import logging.handlers
+
+
+END_RESPONSE_LINE = "END"
+HANDSHAKE_PATTERN = "^HELO\t([1-3])$"
+DATA_RESPONSE_PREFIX = "DATA"
+
+
+class ForkingPDNSBackendServer(SocketServer.ForkingMixIn,
+                               SocketServer.UnixStreamServer):
+
+    """
+        This composite class exists to add the ForkingMixIn to UnixStreamServer,
+        and to allow the user to add resolver logic at runtime.
+    """
+
+    def __init__(self, socket):
+        SocketServer.UnixStreamServer.__init__(self, socket, PDNSHandler)
+
+    def set_query_resolver(self, resolver):
+        """ Set the query resolver, this is where you plug your custom code """
+        self.__resolver = resolver
+
+    def set_banner(self, banner):
+        """ Set the custom HELO banner for your backend """
+        self.__banner = banner
+
+    def get_banner(self):
+        return self.__banner if self.__banner else "DEFAULT_BACKEND"
+
+    def lookup_query(self, query):
+        return self.__resolver.lookup_query(query)
+
+
+class PDNSHandler(SocketServer.BaseRequestHandler):
+
+    """ This is the generic handler for a connected socket from pdns """
+
+    def __init__(self, request, client_address, server):
+        self.__logger = logging.getLogger()
+        self.__logger.addHandler(logging.StreamHandler())
+        SocketServer.BaseRequestHandler.__init__(self, request, client_address,
+                                                 server)
+
+    def handle(self):
+        """
+            this method is specified by BaseRequestHandler API. The name may
+            be misleading; a request in this case is a 'session'/connection from
+            PowerDNS.
+        """
+        self.__logger.info("Got connection from PowerDNS, this is a new fork")
+        self.__f = self.request.makefile()
+        try:
+            self.__version = self.__handshake()
+        except Exception as exception:
+            # make sure the error is reported back, and PowerDNS knows we're
+            # done with this query
+            self.__error_out(exception)
+            raise
+        line = self.__f.readline().strip()
+        while line:
+            if line == "":
+                self.__logger.info("Got (sort of) EOF, stopping listener.")
+                break
+            try:
+                result = self.__lookup_query(line)
+            except Exception as exception:
+                self.__error_out(exception)
+                # Re-raise the same exception
+                raise
+            self.__send_response(result)
+            line = self.__f.readline().strip()
+        self.__logger.info("Exiting thread, bye...")
+
+    def __write_line_sync(self, line):
+        """ The PowerDNS pipe backend protocol spec is line based, so we want
+            synchronous writes with line atomicity """
+        self.__f.write(line if line.endswith("\n") else "%s\n" % line)
+        self.__f.flush()
+
+    def __error_out(self, e):
+        """ report the error to PowerDNS """
+        # maybe report errors? self.__write_line_sync("LOG\t%r" % e)
+        self.__logger.exception(e)
+        self.__write_line_sync("FAIL")
+        self.__write_line_sync("END")
+        self.__f.close()
+        self.request.close()
+
+    def __parse_query(self, request_line):
+        """ Parse the query according to the version of pipe backend session """
+        args = request_line.split("\t")
+        expected_args = {1: 6, 2: 7, 3: 8}
+        if expected_args[self.__version] != len(args):
+            raise core.PDNSInvalidQueryException("Invalid query: %s" %
+                                                 request_line)
+        return core.PDNSQuery(*args)
+
+    def __handshake(self):
+        """ Attempt to handshake with PowerDNS, return backend version """
+        line = self.__f.readline().strip()
+        matcher = re.match(HANDSHAKE_PATTERN, line)
+        if matcher:
+            self.__write_line_sync("OK\t%s" % self.server.get_banner())
+            return int(matcher.group(1))
+        raise core.PDNSHandShakeException("handshake failed: '%s'" % line)
+
+    def __lookup_query(self, request_line):
+        self.__logger.debug("got query %s", request_line)
+        return self.server.lookup_query(self.__parse_query(request_line))
+
+    def __send_response(self, result):
+        """
+            Write the response to a succesful query to the client. This takes
+            PDNSRecord objects or objects that fill the same contract.
+        """
+        for record in result:
+            self.__write_line_sync("%s\t%s" % (DATA_RESPONSE_PREFIX,
+                                               record.to_response_line()))
+        self.__write_line_sync(END_RESPONSE_LINE)
