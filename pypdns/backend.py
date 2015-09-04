@@ -17,6 +17,16 @@ HANDSHAKE_PATTERN = "^HELO\t([1-3])$"
 DATA_RESPONSE_PREFIX = "DATA"
 
 
+class AbstractPDNSResolver(object):
+
+    def lookup_query(self, query):
+        """
+            This method will be called by the server. It should return a list
+            of PDNSRecord objects.
+         """
+        raise NotImplemented("Not implemented, extend this class please.")
+
+
 class ForkingPDNSBackendServer(SocketServer.ForkingMixIn,
                                SocketServer.UnixStreamServer):
 
