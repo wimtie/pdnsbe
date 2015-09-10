@@ -30,12 +30,12 @@ class AbstractPDNSResolver(object):
         raise NotImplementedError("Not implemented, extend this class please.")
 
 
-class ForkingPDNSBackendServer(SocketServer.ForkingMixIn,
-                               SocketServer.UnixStreamServer):
+class PDNSBackendServer(SocketServer.UnixStreamServer):
 
     """
-        This composite class exists to add the ForkingMixIn to UnixStreamServer,
-        and to allow the user to add resolver logic at runtime.
+        This class is basically a UnixStreamServer that parses PDNS queries, and
+        send the queries into a pluggable resolver. This allows the user to add
+        resolver logic at runtime.
     """
 
     def __init__(self, socket):
@@ -146,3 +146,16 @@ class PDNSHandler(SocketServer.BaseRequestHandler):
             self.__write_line_sync("%s\t%s" % (DATA_RESPONSE_PREFIX,
                                                record.to_response_line()))
         self.__write_line_sync(END_RESPONSE)
+
+
+class ForkingPDNSBackendServer(SocketServer.ForkingMixIn, PDNSBackendServer):
+
+    """ Add ForkingMixIn """
+    pass
+
+
+class ThreadingPDNSBackendServer(SocketServer.ThreadingMixIn,
+                                 PDNSBackendServer):
+
+    """ Add ThreadingMixin """
+    pass
