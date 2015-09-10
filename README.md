@@ -1,4 +1,4 @@
-# pypdns
+# pdnsbe
 Python PowerDNS Generic Backend
 
 This is a simple pluggable library that allows the user to create a socket-based PowerDNS pipe backend. The server class extends SocketServer, so one would use it in the same manner.
