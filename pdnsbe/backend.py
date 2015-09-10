@@ -7,7 +7,7 @@ Socket based back-end server for PowerDNS with pluggable query resolution.
 
 import re
 import SocketServer
-import pypdns.core as core
+import pdnsbe.core as core
 import logging
 import logging.handlers
 
