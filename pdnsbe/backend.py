@@ -12,7 +12,7 @@ import logging
 import logging.handlers
 
 
-END_RESPONSE_LINE = "END"
+END_RESPONSE = "END"
 HANDSHAKE_PATTERN = "^HELO\t([1-3])$"
 DATA_RESPONSE_PREFIX = "DATA"
 
@@ -145,4 +145,4 @@ class PDNSHandler(SocketServer.BaseRequestHandler):
         for record in result:
             self.__write_line_sync("%s\t%s" % (DATA_RESPONSE_PREFIX,
                                                record.to_response_line()))
-        self.__write_line_sync(END_RESPONSE_LINE)
+        self.__write_line_sync(END_RESPONSE)
