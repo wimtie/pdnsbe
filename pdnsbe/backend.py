@@ -41,11 +41,19 @@ class PDNSBackendServer(SocketServer.UnixStreamServer):
     def __init__(self, socket):
         self.__resolver = None
         self.__banner = None
+        self.__loglevel = logging.WARNING
         SocketServer.UnixStreamServer.__init__(self, socket, PDNSHandler)
 
     def set_query_resolver(self, resolver):
         """ Set the query resolver, this is where you plug your custom code """
         self.__resolver = resolver
+
+    def set_loglevel(self, loglevel):
+        """ set the desired log level """
+        self.__loglevel = loglevel
+
+    def get_loglevel(self):
+        return self.__loglevel
 
     def set_banner(self, banner):
         """ Set the custom HELO banner for your backend """
@@ -67,6 +75,7 @@ class PDNSHandler(SocketServer.BaseRequestHandler):
     def __init__(self, request, client_address, server):
         self.__logger = logging.getLogger()
         self.__logger.addHandler(logging.StreamHandler())
+        self.__logger.setLevel(server.get_loglevel())
         SocketServer.BaseRequestHandler.__init__(self, request, client_address,
                                                  server)
 

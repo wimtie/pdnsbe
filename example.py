@@ -4,6 +4,7 @@ import sys
 import profile
 import pdnsbe.backend
 import pdnsbe.core
+import logging
 
 
 class ExampleResolver(pdnsbe.backend.AbstractPDNSResolver):
@@ -16,6 +17,7 @@ class ExampleResolver(pdnsbe.backend.AbstractPDNSResolver):
 def main():
     try:
         s = pdnsbe.backend.ForkingPDNSBackendServer("/tmp/mysocket.socket")
+        s.set_loglevel(logging.INFO)
         s.set_query_resolver(ExampleResolver())
         s.serve_forever()
     except KeyboardInterrupt:
