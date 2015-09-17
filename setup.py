@@ -1,7 +1,7 @@
 from setuptools import setup
 
 
-CUR_VERSION = "0.6"
+CUR_VERSION = "0.6.1"
 
 setup(
     name="pdnsbe",
