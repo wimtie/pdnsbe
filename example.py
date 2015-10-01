@@ -6,6 +6,11 @@ import pdnsbe.backend
 import pdnsbe.core
 import logging
 
+logger = logging.getLogger()
+logging.basicConfig(format="%(process)d %(processName)s %(levelname)s %(message)s")
+logger.setLevel(logging.INFO)
+logger.info("PowerDNS backend handler init")
+
 
 class ExampleResolver(pdnsbe.backend.AbstractPDNSResolver):
 
@@ -16,10 +21,12 @@ class ExampleResolver(pdnsbe.backend.AbstractPDNSResolver):
 
 def main():
     try:
+        logger.info("Starting example server")
         s = pdnsbe.backend.ForkingPDNSBackendServer("/tmp/mysocket.socket")
         s.set_loglevel(logging.INFO)
         s.set_query_resolver(ExampleResolver())
         s.serve_forever()
+        logger.info("Example server shutting down")
     except KeyboardInterrupt:
         print "^C: exiting"
 
