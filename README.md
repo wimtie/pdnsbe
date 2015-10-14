@@ -9,8 +9,8 @@ Example:
 ```python
 #!/usr/bin/python
 
-import pypdns.backend
-import pypdns.core
+import pdnsbe.backend
+import pdnsbe.core
 
 
 class ExampleResolver(pypdns.backend.AbstractPDNSResolver):
@@ -20,7 +20,7 @@ class ExampleResolver(pypdns.backend.AbstractPDNSResolver):
                                        "93.184.216.34")]
 
  
-s = pypdns.backend.ForkingPDNSBackendServer("/tmp/mysocket.socket")
+s = pdnsbe.backend.ForkingPDNSBackendServer("/tmp/mysocket.socket")
 s.set_query_resolver(ExampleResolver())
 s.serve_forever()
 ```
