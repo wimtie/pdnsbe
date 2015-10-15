@@ -2,79 +2,196 @@
 """ Python Generic Backend for PowerDNS """
 
 import socketserver
+import socket
 import logging
 import pdnsbe.core as core
+import threading
+
+
+LOGFORMAT = """%(process)d %(module)s thr:%(thread)d %(processName)s\
+%(threadName)s %(levelname)s %(message)s"""
 
 
 class PDNSResolver(object):
 
+    """
+    Abstract class to implement with custom resolver logic, plug your extended
+    class into the PDNSBackendServer.
+    """
+
     def lookup_query(self, query: core.PDNSQuery) -> list:
+        """
+        This method should be implemented when extending this resolver class.
+        """
         raise Exception("Not implemented.")
 
 
 class PDNSBackendServer(socketserver.UnixStreamServer):
 
-    def __init__(self, socket, loglevel=logging.INFO):
+    """
+    Server listening for connections on a socket, splitting off handlers for
+    each connection.
+    """
+
+    def __init__(self, socket_path, loglevel=logging.INFO):
+        self.__handlers = []
+        self.__resolver = None
         self.__logger = logging.getLogger()
         self.__logger.setLevel(loglevel)
-        logging.basicConfig(format="%(process)d %(processName)s %(levelname)s %(message)s")
-        self.__resolver = None
+        logging.basicConfig(format=LOGFORMAT)
         self.__logger.info("Init server...")
-        socketserver.UnixStreamServer.__init__(self, socket, PDNSBackendHandler)
+        socketserver.UnixStreamServer.__init__(self, socket_path,
+                                               PDNSBackendHandler)
 
-    def set_loglevel(self, loglevel):
-        self.__logger.setLevel(loglevel)
+    def set_loglevel(self, log_level):
+        self.__logger.setLevel(log_level)
 
     def get_loglevel(self):
         return self.__logger.getEffectiveLevel()
 
     def set_resolver(self, resolver: PDNSResolver):
+        """
+        Set resolver which provides the actual logic for lookups.
+        """
         self.__logger.info("Setting resolver: %r" % resolver)
         self.__resolver = resolver
 
     def lookup_query(self, query: core.PDNSQuery) -> list:
+        """
+        Lookup a query. This method only works when the resolver is set.
+        """
         if self.__resolver is None:
             raise Exception("This backend server has no resolver set!")
         return self.__resolver.lookup_query(query)
 
+    def register_handler(self, handler):
+        """
+        This registers handlers that are running for this server. We need this
+        so we can shut them down when we are told to stop.
+        """
+        self.__logger.debug("Registering handler %r" % handler)
+        self.__handlers.append(handler)
 
-class ForkingPNDSBackendServer(PDNSBackendServer, socketserver.ForkingMixIn):
+    def unregister_handler(self, handler):
+        """
+        Un-registers handlers after they're stopped or finished running.
+        """
+        self.__logger.info("Un-registering handler %r" % handler)
+        self.__handlers.remove(handler)
+
+    def stop(self):
+        """
+        Stop the server and its handlers that may still be running
+        """
+        self.__logger.info("Shutting down registered handlers (%d)"
+                           % (len(self.__handlers)))
+        for handler in self.__handlers:
+            handler.stop()
+        self.__logger.debug("Closing server socket...")
+        threading.Thread(target=self.socket.close).start()
+        self.__logger.info("Shutting down server...")
+        threading.Thread(target=self.shutdown).start()
+        self.__logger.info("Server has been shut down")
+
+
+class ForkingPDNSBackendServer(socketserver.ForkingMixIn, PDNSBackendServer):
     pass
 
 
-class ThreadingPDNSBackendServer(PDNSBackendServer, socketserver.ThreadingMixIn):
+class ThreadingPDNSBackendServer(socketserver.ThreadingMixIn,
+                                 PDNSBackendServer):
     pass
 
 
 class PDNSBackendHandler(socketserver.BaseRequestHandler):
 
-    def __init__(self, request, client_address, server):
+    """
+    This class handles a request(connection) from a client.
+    """
+
+    def __init__(self, request: socket.socket, client_address: str,
+                 server: PDNSBackendServer):
         self.__server = server
         self.__logger = logging.getLogger()
         self.__logger.setLevel(server.get_loglevel())
-        logging.basicConfig(format="%(process)d %(processName)s %(levelname)s %(message)s")
+        logging.basicConfig(format=LOGFORMAT)
         self.__request = request
-        socketserver.BaseRequestHandler.__init__(self, request, client_address, server)
+        self.__shutdown = False
+        self.__version = None
+        self.__f = None
+        server.register_handler(self)
+        socketserver.BaseRequestHandler.__init__(self, request, client_address,
+                                                 server)
 
     def handle(self):
+        """
+        This method handles a connection from a client.
+        """
         self.__f = self.__request.makefile(mode="rw")
         self.__version = self.__handshake()
-        self.__logger.debug("Start handling")
+        self.__logger.info("Start handling")
+        try:
+            self.__tight_loop()
+        except Exception as e:
+            self.__error_out(e)
+            raise
+        self.stop()
+
+    def __tight_loop(self):
         line = self.__readline()
         while line:
-            query = self.__parse_query(line)
-            results = self.__server.lookup_query(query)
-            for result in results:
-                self.__write_line_sync(self.__to_response_line(result))
-            self.__write_line_sync("END")
+            if line is None or line == "":
+                # We're done, exit loop
+                break
+            self.__handle_line(line)
             line = self.__readline()
         self.__logger.info("Done with session, exiting...")
 
-    def __readline(self):
-        return self.__f.readline().strip()
+    def __handle_line(self, line: str):
+        """
+        Process one line received from client.
+        """
+        query = self.__parse_query(line)
+        results = self.__server.lookup_query(query)
+        if results is None:
+            raise Exception("no results for %r" % query)
+        self.__write_response(results)
 
-    def __handshake(self):
+    def __readline(self):
+        """
+        Blocking call to read a line from the client/socket. When shutting down
+        this will throw an error, which is why we must handle shutdown here.
+        """
+        try:
+            return self.__f.readline().strip()
+        except (ValueError, OSError):
+            if self.__shutdown:
+                # Shutdown was requested, don't complain about closed handle
+                return None
+            raise
+
+    def __write_line_sync(self, line: str):
+        """
+        The PowerDNS pipe backend protocol is line delimited so we want to
+        write with line atomicity.
+        """
+        self.__f.write(line if line.endswith("\n") else "%s\n" % line)
+        self.__f.flush()
+
+    def __error_out(self, exception: Exception):
+        """
+        Log error and report failure to client.
+        """
+        self.__logger.error(exception)
+        self.__write_line_sync("FAIL")
+
+    def __handshake(self) ->int:
+        """
+        Attempt to handshake with client, returns backend abi version
+        """
         line = self.__readline()
+        if line is None:
+            return
         matcher = core.HELO_REGEX.match(line)
         if matcher is None:
             raise core.PDNSHandshakeException("Handshake failed: %s" % line)
@@ -83,13 +200,42 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         self.__write_line_sync("HELO\tdefault backend")
         return version
 
-    def __parse_query(self, line) -> core.PDNSQuery:
-        return core.PDNSQuery(*line.split(core.Q_SEPARATOR))
+    def __parse_query(self, line: str) -> core.PDNSQuery:
+        """
+        Parse a line received from client into a query according to abi version
+        """
+        parts = line.split(core.Q_SEPARATOR)
+        return core.PDNSQuery(*parts)
 
-    def __write_line_sync(self, line: str):
-        self.__f.write(line if line.endswith("\n") else "%s\n" % line)
-        self.__f.flush()
+    def __write_response(self, results: list):
+        """
+        Write a list of results back to the client.
+        """
+        for result in results:
+            self.__write_line_sync(self.__to_response_line(result))
+        self.__write_line_sync("END")
+
+    def stop(self):
+        """
+        Stop this handler. We need this for cleanup and to prevent hanging
+        threads blocking forever on readline when we want to shutdown.
+        """
+        self.__write_line_sync("")
+        self.__shutdown = True
+        self.__logger.debug("Shutting down this handler")
+        self.__request.close()
+        if type(self.server) == ThreadingPDNSBackendServer:
+            self.__f.close()
+        self.__logger.debug("Handler shut down")
+        self.__server.unregister_handler(self)
 
     def __to_response_line(self, result: core.PDNSRecord):
-        return "%s\t%s\t%s\t%s\t%d\t%d\t%s" % ("Q", result.get_name(), result.get_type(), result.get_class(),
-                                               result.get_ttl(), result.get_id(), result.get_content())
+        """
+        Convert response into a PDNS pipe backend compliant string
+        """
+        return "%s\t%s\t%s\t%s\t%s\t%s\t%s" % ("Q", result.get_name(),
+                                               result.get_type(),
+                                               result.get_class(),
+                                               result.get_ttl(),
+                                               result.get_id(),
+                                               result.get_content())
