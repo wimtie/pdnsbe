@@ -11,6 +11,8 @@ import threading
 LOGFORMAT = """%(process)d %(module)s thr:%(thread)d %(processName)s\
 %(threadName)s %(levelname)s %(message)s"""
 
+logger = logging.getLogger()
+
 
 class PDNSResolver(object):
 
@@ -33,27 +35,18 @@ class PDNSBackendServer(socketserver.UnixStreamServer):
     each connection.
     """
 
-    def __init__(self, socket_path, loglevel=logging.INFO):
+    def __init__(self, socket_path):
         self.__handlers = []
         self.__resolver = None
-        self.__logger = logging.getLogger()
-        self.__logger.setLevel(loglevel)
-        logging.basicConfig(format=LOGFORMAT)
-        self.__logger.info("Init server...")
+        logger.info("Init server...")
         socketserver.UnixStreamServer.__init__(self, socket_path,
                                                PDNSBackendHandler)
-
-    def set_loglevel(self, log_level):
-        self.__logger.setLevel(log_level)
-
-    def get_loglevel(self):
-        return self.__logger.getEffectiveLevel()
 
     def set_resolver(self, resolver: PDNSResolver):
         """
         Set resolver which provides the actual logic for lookups.
         """
-        self.__logger.info("Setting resolver: %r" % resolver)
+        logger.info("Setting resolver: %r" % resolver)
         self.__resolver = resolver
 
     def lookup_query(self, query: core.PDNSQuery) -> list:
@@ -69,29 +62,29 @@ class PDNSBackendServer(socketserver.UnixStreamServer):
         This registers handlers that are running for this server. We need this
         so we can shut them down when we are told to stop.
         """
-        self.__logger.debug("Registering handler %r" % handler)
+        logger.debug("Registering handler %r" % handler)
         self.__handlers.append(handler)
 
     def unregister_handler(self, handler):
         """
-        Un-registers handlers after they're stopped or finished running.
+        Un-registers handlers after they are stopped or finished running.
         """
-        self.__logger.info("Un-registering handler %r" % handler)
+        logger.info("Un-registering handler %r" % handler)
         self.__handlers.remove(handler)
 
     def stop(self):
         """
         Stop the server and its handlers that may still be running
         """
-        self.__logger.info("Shutting down registered handlers (%d)"
-                           % (len(self.__handlers)))
+        logger.info("Shutting down registered handlers (%d)"
+                    % (len(self.__handlers)))
         for handler in self.__handlers:
             handler.stop()
-        self.__logger.debug("Closing server socket...")
+        logger.debug("Closing server socket...")
         threading.Thread(target=self.socket.close).start()
-        self.__logger.info("Shutting down server...")
+        logger.info("Shutting down server...")
         threading.Thread(target=self.shutdown).start()
-        self.__logger.info("Server has been shut down")
+        logger.info("Server has been shut down")
 
 
 class ForkingPDNSBackendServer(socketserver.ForkingMixIn, PDNSBackendServer):
@@ -112,9 +105,6 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
     def __init__(self, request: socket.socket, client_address: str,
                  server: PDNSBackendServer):
         self.__server = server
-        self.__logger = logging.getLogger()
-        self.__logger.setLevel(server.get_loglevel())
-        logging.basicConfig(format=LOGFORMAT)
         self.__request = request
         self.__shutdown = False
         self.__version = None
@@ -129,7 +119,7 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         """
         self.__f = self.__request.makefile(mode="rw")
         self.__version = self.__handshake()
-        self.__logger.info("Start handling")
+        logger.info("Start handling")
         try:
             self.__tight_loop()
         except Exception as e:
@@ -145,7 +135,7 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
                 break
             self.__handle_line(line)
             line = self.__readline()
-        self.__logger.info("Done with session, exiting...")
+        logger.info("Done with session, exiting...")
 
     def __handle_line(self, line: str):
         """
@@ -182,7 +172,7 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         """
         Log error and report failure to client.
         """
-        self.__logger.error(exception)
+        logger.error(exception)
         self.__write_line_sync("FAIL")
 
     def __handshake(self) ->int:
@@ -222,11 +212,11 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         """
         self.__write_line_sync("")
         self.__shutdown = True
-        self.__logger.debug("Shutting down this handler")
+        logger.debug("Shutting down this handler")
         self.__request.close()
         if type(self.server) == ThreadingPDNSBackendServer:
             self.__f.close()
-        self.__logger.debug("Handler shut down")
+        logger.debug("Handler shut down")
         self.__server.unregister_handler(self)
 
     def __to_response_line(self, result: core.PDNSRecord):
