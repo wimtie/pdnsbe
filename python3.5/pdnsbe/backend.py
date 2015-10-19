@@ -125,7 +125,6 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         except Exception as e:
             self.__error_out(e)
             raise
-        self.stop()
 
     def __tight_loop(self):
         line = self.__readline()
