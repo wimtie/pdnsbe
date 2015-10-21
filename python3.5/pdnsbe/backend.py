@@ -143,7 +143,8 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         query = self.__parse_query(line)
         results = self.__server.lookup_query(query)
         if results is None:
-            raise Exception("no results for %r" % query)
+            self.__write_line_sync("END")
+            return
         self.__write_response(results)
 
     def __readline(self):
