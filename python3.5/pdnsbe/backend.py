@@ -222,7 +222,7 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         """
         Convert response into a PDNS pipe backend compliant string
         """
-        return "%s\t%s\t%s\t%s\t%s\t%s\t%s" % ("Q", result.get_name(),
+        return "%s\t%s\t%s\t%s\t%s\t%s\t%s" % ("DATA", result.get_name(),
                                                result.get_type(),
                                                result.get_class(),
                                                result.get_ttl(),
