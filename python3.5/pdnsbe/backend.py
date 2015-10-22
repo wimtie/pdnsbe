@@ -186,7 +186,9 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         if matcher is None:
             raise core.PDNSHandshakeException("Handshake failed: %s" % line)
         _ = matcher.group(1)
-        version = matcher.group(2)
+        version = int(matcher.group(2))
+        if version not in range(1, 4):
+            raise core.PDNSHandshakeException("Handshake failed: %s" % line)
         self.__write_line_sync("HELO\tdefault backend")
         return version
 
@@ -195,7 +197,16 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         Parse a line received from client into a query according to abi version
         """
         parts = line.split(core.Q_SEPARATOR)
-        return core.PDNSQuery(*parts)
+        if self.__version == 1 and not len(parts) == 6:
+                raise core.QueryParseException("Malformed query: %s version %d"
+                                               % (line, self.__version))
+        if self.__version == 2 and not len(parts) == 7:
+                raise core.QueryParseException("Malformed query: %s version %d"
+                                   % (line, self.__version))
+        if self.__version == 3 and not len(parts) == 8:
+                raise core.QueryParseException("Malformed query: %s version %d"
+                                   % (line, self.__version))
+        return core.PDNSQuery(self.__version, *parts)
 
     def __write_response(self, results: list):
         """
