@@ -2,7 +2,7 @@ import sys
 from setuptools import setup
 
 
-CUR_VERSION = "0.9.1"
+CUR_VERSION = "0.9.2"
 
 base_dir = "python%d.%d" % (sys.version_info[0], sys.version_info[1])
 
