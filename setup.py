@@ -2,14 +2,15 @@ import sys
 from setuptools import setup
 
 
-CUR_VERSION = "0.9.2"
+CUR_VERSION = "0.9.3"
 
-base_dir = "python%d.%d" % (sys.version_info[0], sys.version_info[1])
+if sys.version_info[0] < 3:
+    raise Exception("Can not build for python version <3")
 
 setup(
     name="pdnsbe",
     packages=["pdnsbe"],
-    package_dir={"pdnsbe": "%s/pdnsbe" % base_dir},
+    package_dir={"pdnsbe": "pdnsbe"},
     version=CUR_VERSION,
     description="""Library to easily implement and run a python PowerDNS socket
                    backend.""",
