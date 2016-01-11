@@ -2,7 +2,7 @@ import sys
 from setuptools import setup
 
 
-CUR_VERSION = "0.9.3"
+CUR_VERSION = "0.9.4"
 
 if sys.version_info[0] < 3:
     raise Exception("Can not build for python version <3")

@@ -1,14 +1,17 @@
 #!/usr/bin/python
 
 import sys
+import os
 import profile
 import pdnsbe.backend
 import pdnsbe.core
 import logging
 
+EXAMPLE_SOCKET = "/tmp/example.socket"
+
 logger = logging.getLogger()
 logging.basicConfig(format="%(process)d %(processName)s %(levelname)s %(message)s")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.info("PowerDNS backend handler init")
 
 
@@ -20,9 +23,11 @@ class ExampleResolver(pdnsbe.backend.PDNSResolver):
 
 
 def main():
+    if os.path.exists(EXAMPLE_SOCKET):
+        os.unlink(EXAMPLE_SOCKET)
     try:
         logger.info("Starting example server")
-        s = pdnsbe.backend.ForkingPDNSBackendServer("/tmp/example.socket")
+        s = pdnsbe.backend.ThreadingPDNSBackendServer(EXAMPLE_SOCKET)
         s.set_resolver(ExampleResolver())
         s.serve_forever()
         logger.info("Example server shutting down")

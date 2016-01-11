@@ -11,6 +11,7 @@ import threading
 LOGFORMAT = """%(process)d %(module)s thr:%(thread)d %(processName)s\
 %(threadName)s %(levelname)s %(message)s"""
 
+logging.basicConfig(format=LOGFORMAT)
 logger = logging.getLogger()
 
 
@@ -110,6 +111,7 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         self.__version = None
         self.__f = None
         server.register_handler(self)
+        logger.debug("Inited new handler %r" % self)
         socketserver.BaseRequestHandler.__init__(self, request, client_address,
                                                  server)
 
@@ -117,14 +119,17 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         """
         This method handles a connection from a client.
         """
+        logger.debug("Starting session...")
         self.__f = self.__request.makefile(mode="rw")
         self.__version = self.__handshake()
-        logger.info("Start handling")
+        logger.info("Start handling...")
         try:
             self.__tight_loop()
         except Exception as e:
             self.__error_out(e)
             raise
+        # finally:
+        #    self.stop()
 
     def __tight_loop(self):
         line = self.__readline()
@@ -225,8 +230,8 @@ class PDNSBackendHandler(socketserver.BaseRequestHandler):
         self.__shutdown = True
         logger.debug("Shutting down this handler")
         self.__request.close()
-        if type(self.server) == ThreadingPDNSBackendServer:
-            self.__f.close()
+        # if type(self.server) == ThreadingPDNSBackendServer:
+        self.__f.close()
         logger.debug("Handler shut down")
         self.__server.unregister_handler(self)
 
